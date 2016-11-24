@@ -97,13 +97,23 @@ int main (void) {
 }
 ```
 
+
+# Optimizing the Assembly
+
+This would probably be a good time to point out that Don't Be Clever
+
+
 # Tools
 
 - avr-gcc
+- avrdude
+- avr-size
+- avr-objdump
+- make
 - PCBmode
 - Inkscape
 
-    apt-get isntall binutils-avr gcc-avr
+    apt-get install binutils-avr gcc-avr avrdude avr-libc
 
 
 # Sandbox
