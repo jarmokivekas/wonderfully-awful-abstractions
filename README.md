@@ -32,9 +32,9 @@ void loop() {
 }
 ```
 
-All the files used for building, the build output, and intermediate files are placed by the Arduino IDE into a directory structure in `/tmp/build-<large-random-sting>.tmp`.
-Among those files is the final binary that is flash onto the micro controller.
-Initially loading the Blink.ino example program, and compiling it for the ATmega328 yields a 1066 byte binary without, even when not counting any bootloader.
+All the files used for building, the build output itself, and various intermediate files are placed by the Arduino IDE into a directory structure in `/tmp/build-<large-random-sting>.tmp`.
+Among those files is the final binary that is flashed onto the micro controller.
+Initially loading the Blink.ino example program, and compiling it for the ATmega328 yields a 1066 byte binary, even when not considering any bootloader.
 
 ```
 > avr-size blink.ino.elf
@@ -85,7 +85,7 @@ IDE does not give very granular control of compile options, and as far as the co
 Some other solution is required.
 
 
-# Moving to plain avr-gcc
+# Moving to Plain avr-gcc
 
 While it has it's uses, and many have gotten their start in the familiar environment of the Arduino IDE, it will now be ditched in favor of a more plain toolchain: the `avr-gcc` command line.
 
@@ -125,12 +125,73 @@ text	   data	    bss	    dec	    hex	filename
 
 ```
 
+Once again, we are reaching the limit of how much the code can be optimized with the tools that are in use. Next!
+
+# Generating (Dis)Assembly
 
 
-# Optimizing the Assembly
+There are several good ways for generating assembly from C source code.
+One option is to pass the `-S` (capital s) flag to `avr-gcc`, which will cause the command to output mnemonic assembly instructions instad of machine code.
 
-This would probably be a good time to point out that Don't Be Clever
+Another excellent option is to produce disassembly output using `avr-objdump`.
+Some useful flags are `-Mintel`,  `--source`, and `--disassemble-all`.
+The output of `avr-objdump` can be made even more verbose if the file being disassembled was compiled with debuggig symbols, i.e. the `-g` flag in gcc.
 
+
+By disassembling the machine code into something more (but maybe not quite?) human readable, we can find what actually makes our latest binary to be 176 bytes in size.
+
+# Dissection
+
+Looking at the very start of the file, starting at offset 0x00, there is a section labeled `<__vectors>`
+For the sake of brevity, the entire section is not listed below, but save for the first instruction, they are all `jmp 0x7c`.
+That's an unconditional jump to address `0x7c`.
+
+```
+00000000 <__vectors>:
+   0:	0c 94 34 00 	jmp	0x68	; 0x68 <__ctors_end>
+   4:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+   8:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+   c:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+  10:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+  {{lines snipped for brevity}}
+  58:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+  5c:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+  60:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+  64:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
+```
+
+So what's at `0x7c`, one might ask, since seemingly everyone wants to jump there?
+Well, another unconditional jump, to address `0x00`, which in turn is an unconditional jump to `0x68`, labeled `<__ctors_end>`
+```
+00000068 <__ctors_end>:
+  68:	11 24       	eor	r1, r1
+  6a:	1f be       	out	0x3f, r1	; 63
+  6c:	cf ef       	ldi	r28, 0xFF	; 255
+  6e:	d8 e0       	ldi	r29, 0x08	; 8
+  70:	de bf       	out	0x3e, r29	; 62
+  72:	cd bf       	out	0x3d, r28	; 61
+  74:	0e 94 40 00 	call	0x80	; 0x80 <main>
+  78:	0c 94 56 00 	jmp	0xac	; 0xac <_exit>
+
+0000007c <__bad_interrupt>:
+  7c:	0c 94 00 00 	jmp	0	; 0x0 <__vectors>
+```
+
+In the simple blinky, no interrupts are actually in use, and all these excess `jmp 0x7c` instruction, the interrupt vector table, is a waste of space.
+The next step of this exploration is to take the relevant parts of the assembly code and start using that as our source for compiling new binaries.
+
+# Modifying the Assembly
+
+This would probably be a good time to point out that, please, [Don't Be Clever](http://embedded.fm/episodes/2015/3/25/dont-be-clever).
+
+# Making Assumptions
+
+# Slowing Things Down
+
+
+# How slow can we go?
+
+# Way Slow
 
 # Tools
 
