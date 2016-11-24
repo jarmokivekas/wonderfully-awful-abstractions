@@ -4,14 +4,14 @@ It is implemented using conventional avr abstractions.
 */
 
 #include <avr/io.h>
-#include <avr/interrupt.h>
+#include <util/delay.h>
 
 int main (void) {
 
 	// Set pin mode to output
 	DDRB |= (1 << PB5);
 
-	for(;;){
+	while(1){
 		PORTB |= (1 << PB5);
 		_delay_ms(1000);
 		PORTB &= ~(1 << PB5);

@@ -80,22 +80,39 @@ So, the IDE does not give very granular control of compile options, and as far a
 
 While it has it's uses, and many have gotten their start in the familiar environment of the Arduino IDE, it will now be ditched in favor of a more plain toolchain: the `avr-gcc` command line.
 
+Pins are addressed somewhat differently when using the AVR-libc abstractions. The syntax can seem strange to begin with, but using the different `DDR` and `PORT` registers instead of `pinMode()` and `digitalWrite()` respectively gives more granular control, and it is a better representation of what is happening in hardware inside the micro controller chip. The minutia of how these registers are used is outside the scope of this particular exploration into blinking lights.
 
+Below is a minimal implementation using avr-libc that performs the same blinking action as the Blink.ino example
 
 ```c
 #include <avr/io.h>
-#include <avr/interrupt.h>
+#include <util/delay.h>
 
 int main (void) {
+	// Set pin mode to output
+	DDRB |= (1 << PB5);
 
 	while(1){
+		PORTB |= (1 << PB5);  // light on
 		_delay_ms(1000);
-
+		PORTB &= ~(1 << PB5); // light off
 		_delay_ms(1000);
 	}
 	return 0;
 }
 ```
+
+Overlooking the change in syntax, this new implementation is still very similar to the example Blink sketch from the IDE. However, the machine code size is significantly smaller, since it is lacking the overhead caused by the hardware initialization routines that are present in Sketches.
+
+`avr-size` reports the size to be 44 bytes, an order of magnitude difference to the 1066 bytes of the earlier version.
+
+```
+> make size
+text	   data	    bss	    dec	    hex	filename
+ 176	      0	      0	    176	     b0	build/02-blink-avr-libc-sane.elf
+
+```
+
 
 
 # Optimizing the Assembly
