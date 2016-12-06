@@ -220,15 +220,38 @@ jmp   0xac
 ```
 
 
- - `eor   r1, r1`: The `eor` instruction stands for _Exlusively OR_. A pseudo code for this could be `r1 = r1 XOR r1`, or more simple `r1 = 0`, since XORing a value with itself will always result in 0.
- - `out   0x3f, r1`: The `out` instruction writes the value of a register into a given RAM address. The processor datasheet lists `0x3f` as _"SREG – AVR Status Register"_
+ - `eor   r1, r1`:
+
+    The `eor` instruction stands for _Exlusively OR_. A pseudo code for this could be `r1 = r1 XOR r1`, or more simple `r1 = 0`, since XORing a value with itself will always result in 0.
+ - `out   0x3f, r1`:
+
+    The `out` instruction writes the value of a register into a given RAM address. The processor datasheet lists `0x3f` as _"SREG – AVR Status Register"_
  - `ldi   r28, 0xFF`
  - `ldi   r29, 0x08`
  - `out   0x3e, r29`
  - `out   0x3d, r28`
- - `call  0x80; 0x80 <main>`
- - `jmp   0xac        ; 0xac <_exit>`
 
+    These four instructions reset the values of the `SPH` and `SPL` registers to their defaults. These regisers are the _"Stack Pointer High and Stack Pointer Low Register"_. The stack is construct that is used for passing function arguments and return values within the program.
+ - `call  0x80; 0x80 <main>`:
+
+    The call instruction is similar to an unconditional jump `(jmp`) instruction, but in addition to jumping, it leaves a pointer to its own address on the stack, so that when the called function returns, the processor knows where to continue.
+
+    The address `0x80` in this case is the start of out `main()` function if the C source code.
+ - `jmp   0xac        ; 0xac <_exit>`:
+
+    Unconditional jump to the `<_exit>` subroutine. In the case of the blink program, this should never be reached, as the `<main>` section includes an infinite loop, and thus the previous `call 0x80` instruction will never complete.
+
+    The disassembly listing at `<_exit>` looks like the following:
+
+    ```
+    000000ac <_exit>:
+      ac:   f8 94   cli
+
+    000000ae <__stop_program>:
+      ae:   ff cf   rjmp .-2 ; 0xae <__stop_program>
+    ```
+
+    The `cli` instruction in `<_exit>` disables all interrupts. Since there is no return or jump instruction, the program will continue execution at the next instruction, which is the `rjmp .-2` in `<__stop_program>`. This is a _relative jump_ instruction that jumps 2 bytes backward in the machine code. Notice that the hex for `rjmp .-2` is two bytes long (`ff cf`). This causes an infinite loop, where the instruction jumps to itself, which jumps to itself, which jumps to itself, and so on. Since interrupt have been disabled by `cli`, the only thing that can alter the program's behavior at this point is a hardware reset.
 
 
 ## The Main Method
