@@ -265,7 +265,15 @@ jmp   0xac
     Notice that the hex for `rjmp .-2` is two bytes long (`ff cf`). This causes an infinite loop, where the instruction jumps to itself, which jumps to itself, which jumps to itself, and so on.
     Since interrupts have been disabled by `cli`, the only thing that can alter the program's behavior at this point is a hardware reset.
 
+## Removing Non-essential Sections
 
+The `<__vectors>` interrupt table, the `<__ctors_end>` initialization code, and the exit sections `<_exit>` and `<__stop_program>` don't actually do anything that is essential for the blink program.
+They are nice things to have for a larger program that does more complex things, but since the goal is to implement blink with as few bytes as possible, these sections should we removed.
+
+The atmega328p's processing will correctly execute any binary that has instructions at address `0`. All of the extra sections that are created during the compilation process can be excluded by using the `-c` flag in `avr-gcc`.
+The `-c` flag will cause the compilation process to create a _relocatable object file_ that contains only instructions for the functions that were defined in the input source code file (whether that file is a `.c` file with C code, or a `.s` with mnemonic assembly code).
+On more complex systems, a relocatable object file would not be executable on its own, but instead multiple object files are combined into one executable binary by the _linker_ stage of the compilation process.
+As long as the `main()` function end up at address `0` of the object file, it will be correctly executed by the atmega328p's processor.
 
 ## The Main Method
 # Flipping bits
