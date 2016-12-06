@@ -2,7 +2,6 @@
 
 # Wonderfully awful abstractions
 
-The code in this repository is a submission to the Hackaday 1kB microcode contest.
 
 # Rationale
 
@@ -95,6 +94,7 @@ The minutia of how these registers are used is outside the scope of this particu
 
 Below is a minimal implementation using avr-libc that performs the same blinking action as the Blink.ino example
 
+
 ```c
 #include <avr/io.h>
 #include <util/delay.h>
@@ -121,30 +121,51 @@ However, the machine code size is significantly smaller, since it is lacking the
 ```
 > make size
 text	   data	    bss	    dec	    hex	filename
- 176	      0	      0	    176	     b0	build/02-blink-avr-libc-sane.elf
+ 176	      0	      0	    176	     b0	build/02-blink-avr-libc.elf
 
 ```
 
-Once again, we are reaching the limit of how much the code can be optimized with the tools that are in use. Next!
+
 
 # Generating (Dis)Assembly
 
+In order to make more optimizations, it's helpful to have a better visibility into the machine code that is being generated. There are several good ways for generating assembly from C source code.
+One option is to pass the `-S` (capital s) flag to `avr-gcc`, which will cause the command to output mnemonic assembly instructions instead of machine code. This is useful, since the assembly listing produced by `avr-gcc -S ...` can be altered manually, and then complied into a binary.
 
-There are several good ways for generating assembly from C source code.
-One option is to pass the `-S` (capital s) flag to `avr-gcc`, which will cause the command to output mnemonic assembly instructions instad of machine code.
 
 Another excellent option is to produce disassembly output using `avr-objdump`.
-Some useful flags are `-Mintel`,  `--source`, and `--disassemble-all`.
-The output of `avr-objdump` can be made even more verbose if the file being disassembled was compiled with debuggig symbols, i.e. the `-g` flag in gcc.
+Some useful flags are `-Mintel`,  `--source`, and `--disassemble-all`. In this project disassembly listing are produced using the command
+
+    `avr-objdump --disassemble-all {input-file}  >  {output-file}`
+
+The output of `avr-objdump` can be made even more verbose if the file being disassembled was compiled with debugging symbols, i.e. the `-g` flag in gcc. The `--source` flag will create a listing with C code intermixed with the disassembly listing.
 
 
 By disassembling the machine code into something more (but maybe not quite?) human readable, we can find what actually makes our latest binary to be 176 bytes in size.
 
 # Dissection
 
-Looking at the very start of the file, starting at offset 0x00, there is a section labeled `<__vectors>`
+This section takes a deeper look at the disassembly of the avr-libc implementation of th e blink program.
+
+    build/02-blink-avr-libc.disasm: build/02-blink-avr-libc.elf
+        avr-objdump -D $< > $@
+
+
+The bulk of the disassembly listing are tabs separated file with the following fileds:
+
+ - memory address, e.g `5c:`
+ - raw hex representation of the machine code instruction, e.g. `0c 94 3e 00`
+ - mnemonic representation of the machine code instruction, e.g. `jmp 0x7c`
+ - a automatically generated comment, usually address labels, of decimal representation of hexadecimal values in the mnemonic instruction field.
+
+
+## The Interrupt Vector Table
+
+Looking at the very start of disassembly the file, starting at offset adress `0`, there is a section labeled `<__vectors>`
 For the sake of brevity, the entire section is not listed below, but save for the first instruction, they are all `jmp 0x7c`.
 That's an unconditional jump to address `0x7c`.
+
+
 
 ```
 00000000 <__vectors>:
@@ -152,16 +173,16 @@ That's an unconditional jump to address `0x7c`.
    4:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
    8:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
    c:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
-  10:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
   {{lines snipped for brevity}}
-  58:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
   5c:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
   60:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
   64:	0c 94 3e 00 	jmp	0x7c	; 0x7c <__bad_interrupt>
 ```
 
 So what's at `0x7c`, one might ask, since seemingly everyone wants to jump there?
-Well, another unconditional jump, to address `0x00`, which in turn is an unconditional jump to `0x68`, labeled `<__ctors_end>`
+Well, another unconditional jump, to address `0x00`, which in turn is an unconditional jump to `0x68`, labeled `<__ctors_end>`:
+
+
 ```
 00000068 <__ctors_end>:
   68:	11 24       	eor	r1, r1
@@ -177,8 +198,43 @@ Well, another unconditional jump, to address `0x00`, which in turn is an uncondi
   7c:	0c 94 00 00 	jmp	0	; 0x0 <__vectors>
 ```
 
-In the simple blinky, no interrupts are actually in use, and all these excess `jmp 0x7c` instruction, the interrupt vector table, is a waste of space.
+The section labeled `<__vectors>` is called an _interrupt vector table_ of a _jump table_. However, since in the simple blink program, no interrupts are actually in use, and all these excess `jmp 0x7c` instruction are not doing anything. If the processor would for some reason end up jumping to any of the entries in the `<__vectors>` section, it would simply jump via `<__bad_interrupt> ` to `<__ctros_end>`. Most micro-controllers, including the atmega328p, have hardware timers and i/o peripherals that can be used to interrupt the main program and execute an _interrupt service routine_ (ISR) when the peripheral reaches a particular state (e.g a timer overflows, an i/o pin's state goes from HIGH to LOW, or an serial communication peripheral receives a byte of data).
+
+
+## Calling the Main Method
+
+All ISR entries in the vector jump table end up at `<__ctors_end>`, so what does that section actually do?
+
+Mnemonic listing of `<__ctors_end>` (same as in the previous sectio, but with different formatting):
+
+```
+00000068 <__ctors_end>:
+eor   r1, r1
+out   0x3f, r1
+ldi   r28, 0xFF
+ldi   r29, 0x08
+out   0x3e, r29
+out   0x3d, r28
+call  0x80
+jmp   0xac
+```
+
+
+ - `eor   r1, r1`: The `eor` instruction stands for _Exlusively OR_. A pseudo code for this could be `r1 = r1 XOR r1`, or more simple `r1 = 0`, since XORing a value with itself will always result in 0.
+ - `out   0x3f, r1`: The `out` instruction writes the value of a register into a given RAM address. The processor datasheet lists `0x3f` as _"SREG – AVR Status Register"_
+ - `ldi   r28, 0xFF`
+ - `ldi   r29, 0x08`
+ - `out   0x3e, r29`
+ - `out   0x3d, r28`
+ - `call  0x80; 0x80 <main>`
+ - `jmp   0xac        ; 0xac <_exit>`
+
+
+
+## The Main Method
 The next step of this exploration is to take the relevant parts of the assembly code and start using that as our source for compiling new binaries.
+
+# Flipping bits
 
 # Modifying the Assembly
 

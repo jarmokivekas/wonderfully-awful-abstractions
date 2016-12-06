@@ -5,56 +5,57 @@ CFLAGS=$(INCLUDEFALGS) $(DEBUGFLAGS) -O1 -Wall -mmcu=atmega328p -DF_CPU=16000000
 LDFLAGS=-Wall
 
 
-avr-libc-sane: src/02-blink-avr-libc-sane.c
-	avr-gcc -o build/02-blink-avr-libc-sane.elf $< $(CFLAGS)
+build/01-blink.ino.elf:
+	# blink.ino: Nothing to be done
+
+build/02-blink-avr-libc.elf: src/02-blink-avr-libc.c
+	# complie elf binary from the c file
+	avr-gcc -o $@ $< $(CFLAGS)
+
+build/02-blink-avr-libc.s: src/02-blink-avr-libc.c
+	# output assembly language from the c file
+	avr-gcc -S -o $@ $< $(CFLAGS)
+
+build/02-blink-avr-libc.disasm: build/02-blink-avr-libc.elf
+	# output assembly language from the elf file
+	avr-objdump $< > $@
+
+build/03-avr-libc-ams.elf: src/02-blink-avr-libc.c
+	# convert previous C file to mnemonic assembly
+	avr-gcc -S -o $@ $< $(CFLAGS)
+
+
+build/04-blink-avr-libc-toggle.elf: src/04-blink-avr-libc-toggle.c
+	# convert previous C file to mnemonic assembly
+	avr-gcc  -o $@ $< $(CFLAGS)
+
+build/04-blink-avr-libc-toggle.s: src/04-blink-avr-libc-toggle.c
+	# output assembly language from the c file
+	avr-gcc -S -o $@ $< $(CFLAGS)
+
+build/05-blink-avr-libc-toggle-from-s.elf: build/04-blink-avr-libc-toggle.s
+	# output assembly language from the c file
+	avr-gcc -o $@ $< $(CFLAGS)
+
+build/06-blink-avr-libc-toggle-from-s-object.elf: build/04-blink-avr-libc-toggle.s
+	# output assembly language from the c file
+	avr-gcc -c -o $@ $< $(CFLAGS)
+
+build/07-blink-avr-libc-toggle-from-s-object.disasm: build/06-blink-avr-libc-toggle-from-s-object.elf
+	# output assembly language from the c file
+	avr-objdump $< -D > $@
+# avr-libc-sane.elf: src/avr-libc-sane.s
 
 size:
 	avr-size build/*.elf
 
 
-bin/AVR/%.o: src/%.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
+#simple_beater_flash:
+#	avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -U flash:w:bin/AVR/simple_beater.hex
+#simple_beater_hex:bin/AVR/simple_beater.o
+#	avr-objcopy -O ihex $^ bin/AVR/simple_beater.hex
 
-src/%.s: src/%.c
-	$(CC) -S -o $@ $< $(CFLAGS)
-
-#--------all inclusive bytebeater
-bytebeater_flash:
-	avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -U flash:w:bin/AVR/bytebeater.hex
-bytebeater_hex:bin/AVR/bytebeater.o
-	avr-objcopy -O ihex $^ bin/AVR/bytebeater.hex
-bin/AVR/bytebeater.o:                 \
-	bin/AVR/log/log_serial.o          \
-	bin/AVR/struct/beat_context.o     \
-	bin/AVR/language/stack_machine.o  \
-	bin/AVR/language/tokenizer.o      \
-	bin/AVR/language/interpreter.o    \
-	bin/AVR/bytebeater/timer.o        \
-	bin/AVR/bytebeater/interface.o    \
-	bin/AVR/bytebeater/main.o
-	$(CC) -o $@ $^ $(LDFLAGS)
-
-#--------simple version of the bytebeater
-simple_beater_flash:
-	avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -U flash:w:bin/AVR/simple_beater.hex
-simple_beater_hex:bin/AVR/simple_beater.o
-	avr-objcopy -O ihex $^ bin/AVR/simple_beater.hex
-bin/AVR/simple_beater.o:          \
-	src/simple_beater/main.c      \
-	src/simple_beater/UART_puts.c \
-	src/simple_beater/TIMER_beat.c \
-	src/simple_beater/ADC_read.c
-	$(CC) -o $@ $^ $(CFLAGS)
-
-#--------sandbox, a place to try AVR code
-sand_flash:
-	avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -U flash:w:bin/AVR/sand.hex
-sand_hex:bin/AVR/sand.o
-	avr-objcopy -O ihex $^ bin/AVR/sand.hex
-bin/AVR/sand.o:\
-	src/sandbox/main.c
-	$(CC) -o $@ $^ $(CFLAGS)
 
 #--------cleaning up
 clean:
-	rm -f build/*elf
+	rm -f build/*elf build/*.disasm
